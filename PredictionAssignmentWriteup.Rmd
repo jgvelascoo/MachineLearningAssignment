@@ -1,0 +1,128 @@
+---
+title: "Prediction Assignment Writeup"
+author: "JV"
+date: "5/11/2020"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+#### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the [website](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset). Also, the goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+#### Data
+
+The training data for this project are available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv).
+The test data are available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv).
+
+The data for this project come from this [source](http://groupware.les.inf.puc-rio.br/har). If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+
+
+## Analysis
+
+#### Load Libraries and data
+```{r}
+# Load Libraries
+library(caret)
+library(randomForest)
+library(gbm)
+
+# Download dataset if it don't exist
+if (!file.exists('pml-training.csv')) {
+  download.file(url = 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', 
+                destfile = 'pml-training.csv', method = 'curl', quiet = TRUE) 
+}
+if (!file.exists('pml-testing.csv')) {
+  download.file(url = 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv', 
+                destfile = 'pml-testing.csv', method = 'curl', quiet = TRUE)
+}
+
+# Load datasets
+trainD <- read.csv('pml-training.csv')
+testD <- read.csv('pml-testing.csv')
+```
+
+#### Preprocessing
+
+1. Remove Variables
+```{r}
+# Remove variables related with column number and time stamps (variables unrelated to exercise)
+trainD <- trainD[, 6:ncol(trainD)]
+
+# Remove the variables with similarities
+VarianceZero <- nearZeroVar(trainD, saveMetrics = T)
+trainD <- trainD[, row.names(VarianceZero[VarianceZero$nzv == FALSE, ])]
+
+# Remove the variables with all NAs
+trainD <- trainD[, colSums(is.na(trainD)) == 0]
+
+str(head(trainD))
+```
+
+2. Split the data into 70% training and 30% testing set
+```{r}
+set.seed(1)
+trainIndex <- createDataPartition(y = trainD$classe, p = 0.7, list = F)
+trainData <- trainD[trainIndex, ]
+testData <- trainD[-trainIndex, ]
+```
+
+#### Model Development (Random Forest)
+
+1. Model Training 
+```{r}
+# Set up 5-fold cross validation for training
+modCtl <- trainControl(method = 'cv', number = 5)
+
+# Fit a model with random forests
+set.seed(1)
+Rf_model <- train(classe ~. , data = trainData, method = 'rf', trControl = modCtl)
+Rf_model$finalModel
+```
+
+2. Model Validation (Confusion Matrix)
+```{r}
+Rf_pred <- predict(Rf_model, newdata = testData)
+confusionMatrix(Rf_pred, testData$classe)$table
+```
+
+3. Model Validation (Accuracy)
+```{r}
+confusionMatrix(Rf_pred, testData$classe)$overall[1]
+```
+
+#### Model Development (Gradient Boosting)
+
+1. Model training
+```{r}
+Gbm_model <- train(classe ~., data = trainData, method = 'gbm', trControl = modCtl, verbose = F)
+Gbm_model$finalModel
+```
+
+2. Model Validation (Confusion Matrix)
+```{r}
+Gbm_pred <- predict(Gbm_model, newdata = testData)
+confusionMatrix(Gbm_pred, testData$classe)$table
+
+```
+
+3. Model Validation (Accuracy)
+```{r}
+confusionMatrix(Gbm_pred, testData$classe)$overall[1]
+```
+
+## Quiz answer
+
+As we can see above, random forests gives the highest accuracy under the validation set, for this reason this model will be selected and used for prediction in the test set.
+
+```{r}
+Rf_pred_test <- predict(Rf_model, newdata = testD)
+Rf_pred_test
+```
